@@ -9,16 +9,36 @@
   ngModelMinErr: false,
 */
 
-// Regex code is obtained from SO: https://stackoverflow.com/questions/3143070/javascript-regex-iso-datetime#answer-3143231
-var ISO_DATE_REGEXP = /\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d:[0-5]\d\.\d+([+-][0-2]\d:[0-5]\d|Z)/;
-var URL_REGEXP = /^(ftp|http|https):\/\/(\w+:{0,1}\w*@)?(\S+)(:[0-9]+)?(\/|\/([\w#!:.?+=&%@!\-\/]))?$/;
-var EMAIL_REGEXP = /^[a-z0-9!#$%&'*+\/=?^_`{|}~.-]+@[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/i;
+// Regex code was initially obtained from SO prior to modification: https://stackoverflow.com/questions/3143070/javascript-regex-iso-datetime#answer-3143231
+var ISO_DATE_REGEXP = /^\d{4,}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d:[0-5]\d\.\d+(?:[+-][0-2]\d:[0-5]\d|Z)$/;
+// See valid URLs in RFC3987 (http://tools.ietf.org/html/rfc3987)
+// Note: We are being more lenient, because browsers are too.
+//   1. Scheme
+//   2. Slashes
+//   3. Username
+//   4. Password
+//   5. Hostname
+//   6. Port
+//   7. Path
+//   8. Query
+//   9. Fragment
+//                 1111111111111111 222   333333    44444        555555555555555555555555    666     77777777     8888888     999
+var URL_REGEXP = /^[a-z][a-z\d.+-]*:\/*(?:[^:@]+(?::[^@]+)?@)?(?:[^\s:/?#]+|\[[a-f\d:]+\])(?::\d+)?(?:\/[^?#]*)?(?:\?[^#]*)?(?:#.*)?$/i;
+/* jshint maxlen:220 */
+var EMAIL_REGEXP = /^(?=.{1,254}$)(?=.{1,64}@)[-!#$%&'*+\/0-9=?A-Z^_`a-z{|}~]+(\.[-!#$%&'*+\/0-9=?A-Z^_`a-z{|}~]+)*@[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$/;
+/* jshint maxlen:200 */
 var NUMBER_REGEXP = /^\s*(\-|\+)?(\d+|(\d*(\.\d*)))([eE][+-]?\d+)?\s*$/;
-var DATE_REGEXP = /^(\d{4})-(\d{2})-(\d{2})$/;
-var DATETIMELOCAL_REGEXP = /^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d)(?::(\d\d)(\.\d{1,3})?)?$/;
-var WEEK_REGEXP = /^(\d{4})-W(\d\d)$/;
-var MONTH_REGEXP = /^(\d{4})-(\d\d)$/;
+var DATE_REGEXP = /^(\d{4,})-(\d{2})-(\d{2})$/;
+var DATETIMELOCAL_REGEXP = /^(\d{4,})-(\d\d)-(\d\d)T(\d\d):(\d\d)(?::(\d\d)(\.\d{1,3})?)?$/;
+var WEEK_REGEXP = /^(\d{4,})-W(\d\d)$/;
+var MONTH_REGEXP = /^(\d{4,})-(\d\d)$/;
 var TIME_REGEXP = /^(\d\d):(\d\d)(?::(\d\d)(\.\d{1,3})?)?$/;
+
+var PARTIAL_VALIDATION_EVENTS = 'keydown wheel mousedown';
+var PARTIAL_VALIDATION_TYPES = createMap();
+forEach('date,datetime-local,month,time,week'.split(','), function(type) {
+  PARTIAL_VALIDATION_TYPES[type] = true;
+});
 
 var inputType = {
 
@@ -44,8 +64,8 @@ var inputType = {
    * @param {string=} pattern Similar to `ngPattern` except that the attribute value is the actual string
    *    that contains the regular expression body that will be converted to a regular expression
    *    as in the ngPattern directive.
-   * @param {string=} ngPattern Sets `pattern` validation error key if the ngModel value does not match
-   *    a RegExp found by evaluating the Angular expression given in the attribute value.
+   * @param {string=} ngPattern Sets `pattern` validation error key if the ngModel {@link ngModel.NgModelController#$viewValue $viewValue}
+   *    does not match a RegExp found by evaluating the Angular expression given in the attribute value.
    *    If the expression evaluates to a RegExp object, then this is used directly.
    *    If the expression evaluates to a string, then it will be converted to a RegExp
    *    after wrapping it in `^` and `$` characters. For instance, `"abc"` will be converted to
@@ -82,11 +102,11 @@ var inputType = {
              <span class="error" ng-show="myForm.input.$error.pattern">
                Single word only!</span>
            </div>
-           <tt>text = {{example.text}}</tt><br/>
-           <tt>myForm.input.$valid = {{myForm.input.$valid}}</tt><br/>
-           <tt>myForm.input.$error = {{myForm.input.$error}}</tt><br/>
-           <tt>myForm.$valid = {{myForm.$valid}}</tt><br/>
-           <tt>myForm.$error.required = {{!!myForm.$error.required}}</tt><br/>
+           <code>text = {{example.text}}</code><br/>
+           <code>myForm.input.$valid = {{myForm.input.$valid}}</code><br/>
+           <code>myForm.input.$error = {{myForm.input.$error}}</code><br/>
+           <code>myForm.$valid = {{myForm.$valid}}</code><br/>
+           <code>myForm.$error.required = {{!!myForm.$error.required}}</code><br/>
           </form>
         </file>
         <file name="protractor.js" type="protractor">
@@ -332,7 +352,7 @@ var inputType = {
    *
    * @description
    * Input with time validation and transformation. In browsers that do not yet support
-   * the HTML5 date input, a text element will be used. In that case, the text must be entered in a valid ISO-8601
+   * the HTML5 time input, a text element will be used. In that case, the text must be entered in a valid ISO-8601
    * local time format (HH:mm:ss), for example: `14:57:00`. Model must be a Date object. This binding will always output a
    * Date object to the model of January 1, 1970, or local date `new Date(1970, 0, 1, HH, mm, ss)`.
    *
@@ -375,7 +395,7 @@ var inputType = {
         }]);
      </script>
      <form name="myForm" ng-controller="DateController as dateCtrl">
-        <label for="exampleInput">Pick a between 8am and 5pm:</label>
+        <label for="exampleInput">Pick a time between 8am and 5pm:</label>
         <input type="time" id="exampleInput" name="input" ng-model="example.value"
             placeholder="HH:mm:ss" min="08:00:00" max="17:00:00" required />
         <div role="alert">
@@ -679,8 +699,8 @@ var inputType = {
    * @param {string=} pattern Similar to `ngPattern` except that the attribute value is the actual string
    *    that contains the regular expression body that will be converted to a regular expression
    *    as in the ngPattern directive.
-   * @param {string=} ngPattern Sets `pattern` validation error key if the ngModel value does not match
-   *    a RegExp found by evaluating the Angular expression given in the attribute value.
+   * @param {string=} ngPattern Sets `pattern` validation error key if the ngModel {@link ngModel.NgModelController#$viewValue $viewValue}
+   *    does not match a RegExp found by evaluating the Angular expression given in the attribute value.
    *    If the expression evaluates to a RegExp object, then this is used directly.
    *    If the expression evaluates to a string, then it will be converted to a RegExp
    *    after wrapping it in `^` and `$` characters. For instance, `"abc"` will be converted to
@@ -777,8 +797,8 @@ var inputType = {
    * @param {string=} pattern Similar to `ngPattern` except that the attribute value is the actual string
    *    that contains the regular expression body that will be converted to a regular expression
    *    as in the ngPattern directive.
-   * @param {string=} ngPattern Sets `pattern` validation error key if the ngModel value does not match
-   *    a RegExp found by evaluating the Angular expression given in the attribute value.
+   * @param {string=} ngPattern Sets `pattern` validation error key if the ngModel {@link ngModel.NgModelController#$viewValue $viewValue}
+   *    does not match a RegExp found by evaluating the Angular expression given in the attribute value.
    *    If the expression evaluates to a RegExp object, then this is used directly.
    *    If the expression evaluates to a string, then it will be converted to a RegExp
    *    after wrapping it in `^` and `$` characters. For instance, `"abc"` will be converted to
@@ -876,8 +896,8 @@ var inputType = {
    * @param {string=} pattern Similar to `ngPattern` except that the attribute value is the actual string
    *    that contains the regular expression body that will be converted to a regular expression
    *    as in the ngPattern directive.
-   * @param {string=} ngPattern Sets `pattern` validation error key if the ngModel value does not match
-   *    a RegExp found by evaluating the Angular expression given in the attribute value.
+   * @param {string=} ngPattern Sets `pattern` validation error key if the ngModel {@link ngModel.NgModelController#$viewValue $viewValue}
+   *    does not match a RegExp found by evaluating the Angular expression given in the attribute value.
    *    If the expression evaluates to a RegExp object, then this is used directly.
    *    If the expression evaluates to a string, then it will be converted to a RegExp
    *    after wrapping it in `^` and `$` characters. For instance, `"abc"` will be converted to
@@ -998,19 +1018,129 @@ var inputType = {
         </file>
         <file name="protractor.js" type="protractor">
           it('should change state', function() {
+            var inputs = element.all(by.model('color.name'));
             var color = element(by.binding('color.name'));
 
             expect(color.getText()).toContain('blue');
 
-            element.all(by.model('color.name')).get(0).click();
-
+            inputs.get(0).click();
             expect(color.getText()).toContain('red');
+
+            inputs.get(1).click();
+            expect(color.getText()).toContain('green');
           });
         </file>
       </example>
    */
   'radio': radioInputType,
 
+  /**
+   * @ngdoc input
+   * @name input[range]
+   *
+   * @description
+   * Native range input with validation and transformation.
+   *
+   * The model for the range input must always be a `Number`.
+   *
+   * IE9 and other browsers that do not support the `range` type fall back
+   * to a text input. Model binding, validation and number parsing are nevertheless supported.
+   *
+   * Browsers that support range (latest Chrome, Safari, Firefox, Edge) treat `input[range]`
+   * in a way that never allows the input to hold an invalid value. That means:
+   * - any non-numerical value is set to `(max + min) / 2`.
+   * - any numerical value that is less than the current min val, or greater than the current max val
+   * is set to the min / max val respectively.
+   *
+   * This has the following consequences for Angular:
+   *
+   * Since the element value should always reflect the current model value, a range input
+   * will set the bound ngModel expression to the value that the browser has set for the
+   * input element. For example, in the following input `<input type="range" ng-model="model.value">`,
+   * if the application sets `model.value = null`, the browser will set the input to `'50'`.
+   * Angular will then set the model to `50`, to prevent input and model value being out of sync.
+   *
+   * That means the model for range will immediately be set to `50` after `ngModel` has been
+   * initialized. It also means a range input can never have the required error.
+   *
+   * This does not only affect changes to the model value, but also to the values of the `min` and
+   * `max` attributes. When these change in a way that will cause the browser to modify the input value,
+   * Angular will also update the model value.
+   *
+   * Automatic value adjustment also means that a range input element can never have the `required`,
+   * `min`, or `max` errors, except when using `ngMax` and `ngMin`, which are not affected by automatic
+   * value adjustment, because they do not set the `min` and `max` attributes.
+   *
+   * @param {string}  ngModel Assignable angular expression to data-bind to.
+   * @param {string=} name Property name of the form under which the control is published.
+   * @param {string=} min Sets the `min` validation to ensure that the value entered is greater
+   *                  than `min`. Can be interpolated.
+   * @param {string=} max Sets the `max` validation to ensure that the value entered is less than `max`.
+   *                  Can be interpolated.
+   * @param {string=} ngMin Takes an expression. Sets the `min` validation to ensure that the value
+   *                  entered is greater than `min`. Does not set the `min` attribute and therefore
+   *                  adds no native HTML5 validation. It also means the browser won't adjust the
+   *                  element value in case `min` is greater than the current value.
+   * @param {string=} ngMax Takes an expression. Sets the `max` validation to ensure that the value
+   *                  entered is less than `max`. Does not set the `max` attribute and therefore
+   *                  adds no native HTML5 validation. It also means the browser won't adjust the
+   *                  element value in case `max` is less than the current value.
+   * @param {string=} ngChange Angular expression to be executed when the ngModel value changes due
+   *                  to user interaction with the input element.
+   *
+   * @example
+      <example name="range-input-directive" module="rangeExample">
+        <file name="index.html">
+          <script>
+            angular.module('rangeExample', [])
+              .controller('ExampleController', ['$scope', function($scope) {
+                $scope.value = 75;
+                $scope.min = 10;
+                $scope.max = 90;
+              }]);
+          </script>
+          <form name="myForm" ng-controller="ExampleController">
+
+            Model as range: <input type="range" name="range" ng-model="value" min="{{min}}"  max="{{max}}">
+            <hr>
+            Model as number: <input type="number" ng-model="value"><br>
+            Min: <input type="number" ng-model="min"><br>
+            Max: <input type="number" ng-model="min"><br>
+            value = <code>{{value}}</code><br/>
+            myForm.range.$valid = <code>{{myForm.range.$valid}}</code><br/>
+            myForm.range.$error = <code>{{myForm.range.$error}}</code>
+          </form>
+        </file>
+      </example>
+
+   * ## Range Input with ngMin & ngMax attributes
+
+   * @example
+      <example name="range-input-directive-ng" module="rangeExample">
+        <file name="index.html">
+          <script>
+            angular.module('rangeExample', [])
+              .controller('ExampleController', ['$scope', function($scope) {
+                $scope.value = 75;
+                $scope.min = 10;
+                $scope.max = 90;
+              }]);
+          </script>
+          <form name="myForm" ng-controller="ExampleController">
+            Model as range: <input type="range" name="range" ng-model="value" ng-min="min" ng-max="max">
+            <hr>
+            Model as number: <input type="number" ng-model="value"><br>
+            Min: <input type="number" ng-model="min"><br>
+            Max: <input type="number" ng-model="min"><br>
+            value = <code>{{value}}</code><br/>
+            myForm.range.$valid = <code>{{myForm.range.$valid}}</code><br/>
+            myForm.range.$error = <code>{{myForm.range.$error}}</code>
+          </form>
+        </file>
+      </example>
+
+   */
+  'range': rangeInputType,
 
   /**
    * @ngdoc input
@@ -1096,7 +1226,7 @@ function baseInputType(scope, element, attr, ctrl, $sniffer, $browser) {
   if (!$sniffer.android) {
     var composing = false;
 
-    element.on('compositionstart', function(data) {
+    element.on('compositionstart', function() {
       composing = true;
     });
 
@@ -1105,6 +1235,8 @@ function baseInputType(scope, element, attr, ctrl, $sniffer, $browser) {
       listener();
     });
   }
+
+  var timeout;
 
   var listener = function(ev) {
     if (timeout) {
@@ -1135,8 +1267,6 @@ function baseInputType(scope, element, attr, ctrl, $sniffer, $browser) {
   if ($sniffer.hasEvent('input')) {
     element.on('input', listener);
   } else {
-    var timeout;
-
     var deferListener = function(ev, input, origValue) {
       if (!timeout) {
         timeout = $browser.defer(function() {
@@ -1167,6 +1297,26 @@ function baseInputType(scope, element, attr, ctrl, $sniffer, $browser) {
   // if user paste into input using mouse on older browser
   // or form autocomplete on newer browser, we need "change" event to catch it
   element.on('change', listener);
+
+  // Some native input types (date-family) have the ability to change validity without
+  // firing any input/change events.
+  // For these event types, when native validators are present and the browser supports the type,
+  // check for validity changes on various DOM events.
+  if (PARTIAL_VALIDATION_TYPES[type] && ctrl.$$hasNativeValidators && type === attr.type) {
+    element.on(PARTIAL_VALIDATION_EVENTS, function(ev) {
+      if (!timeout) {
+        var validity = this[VALIDITY_STATE_PROPERTY];
+        var origBadInput = validity.badInput;
+        var origTypeMismatch = validity.typeMismatch;
+        timeout = $browser.defer(function() {
+          timeout = null;
+          if (validity.badInput !== origBadInput || validity.typeMismatch !== origTypeMismatch) {
+            listener(ev);
+          }
+        });
+      }
+    });
+  }
 
   ctrl.$render = function() {
     // Workaround for Firefox validation #12102.
@@ -1221,7 +1371,7 @@ function createDateParser(regexp, mapping) {
       // When a date is JSON'ified to wraps itself inside of an extra
       // set of double quotes. This makes the date parsing code unable
       // to match the date string and parse it as a date.
-      if (iso.charAt(0) == '"' && iso.charAt(iso.length - 1) == '"') {
+      if (iso.charAt(0) === '"' && iso.charAt(iso.length - 1) === '"') {
         iso = iso.substring(1, iso.length - 1);
       }
       if (ISO_DATE_REGEXP.test(iso)) {
@@ -1337,19 +1487,12 @@ function badInputChecker(scope, element, attr, ctrl) {
   if (nativeValidation) {
     ctrl.$parsers.push(function(value) {
       var validity = element.prop(VALIDITY_STATE_PROPERTY) || {};
-      // Detect bug in FF35 for input[email] (https://bugzilla.mozilla.org/show_bug.cgi?id=1064430):
-      // - also sets validity.badInput (should only be validity.typeMismatch).
-      // - see http://www.whatwg.org/specs/web-apps/current-work/multipage/forms.html#e-mail-state-(type=email)
-      // - can ignore this case as we can still read out the erroneous email...
-      return validity.badInput && !validity.typeMismatch ? undefined : value;
+      return validity.badInput || validity.typeMismatch ? undefined : value;
     });
   }
 }
 
-function numberInputType(scope, element, attr, ctrl, $sniffer, $browser) {
-  badInputChecker(scope, element, attr, ctrl);
-  baseInputType(scope, element, attr, ctrl, $sniffer, $browser);
-
+function numberFormatterParser(ctrl) {
   ctrl.$$parserName = 'number';
   ctrl.$parsers.push(function(value) {
     if (ctrl.$isEmpty(value))      return null;
@@ -1366,6 +1509,12 @@ function numberInputType(scope, element, attr, ctrl, $sniffer, $browser) {
     }
     return value;
   });
+}
+
+function numberInputType(scope, element, attr, ctrl, $sniffer, $browser) {
+  badInputChecker(scope, element, attr, ctrl);
+  numberFormatterParser(ctrl);
+  baseInputType(scope, element, attr, ctrl, $sniffer, $browser);
 
   if (isDefined(attr.min) || attr.ngMin) {
     var minVal;
@@ -1375,7 +1524,7 @@ function numberInputType(scope, element, attr, ctrl, $sniffer, $browser) {
 
     attr.$observe('min', function(val) {
       if (isDefined(val) && !isNumber(val)) {
-        val = parseFloat(val, 10);
+        val = parseFloat(val);
       }
       minVal = isNumber(val) && !isNaN(val) ? val : undefined;
       // TODO(matsko): implement validateLater to reduce number of validations
@@ -1391,13 +1540,117 @@ function numberInputType(scope, element, attr, ctrl, $sniffer, $browser) {
 
     attr.$observe('max', function(val) {
       if (isDefined(val) && !isNumber(val)) {
-        val = parseFloat(val, 10);
+        val = parseFloat(val);
       }
       maxVal = isNumber(val) && !isNaN(val) ? val : undefined;
       // TODO(matsko): implement validateLater to reduce number of validations
       ctrl.$validate();
     });
   }
+}
+
+function rangeInputType(scope, element, attr, ctrl, $sniffer, $browser) {
+  badInputChecker(scope, element, attr, ctrl);
+  numberFormatterParser(ctrl);
+  baseInputType(scope, element, attr, ctrl, $sniffer, $browser);
+
+  var minVal = 0,
+      maxVal = 100,
+      supportsRange = ctrl.$$hasNativeValidators && element[0].type === 'range',
+      validity = element[0].validity;
+
+  var originalRender = ctrl.$render;
+
+  ctrl.$render = supportsRange && isDefined(validity.rangeUnderflow) && isDefined(validity.rangeOverflow) ?
+    //Browsers that implement range will set these values automatically, but reading the adjusted values after
+    //$render would cause the min / max validators to be applied with the wrong value
+    function rangeRender() {
+      originalRender();
+      ctrl.$setViewValue(element.val());
+    } :
+    originalRender;
+
+  function minChange(val) {
+    if (isDefined(val) && !isNumber(val)) {
+      val = parseFloat(val);
+    }
+    minVal = isNumber(val) && !isNaN(val) ? val : undefined;
+    // ignore changes before model is initialized
+    if (isNumber(ctrl.$modelValue) && isNaN(ctrl.$modelValue)) {
+      return;
+    }
+
+    if (supportsRange && minAttrType === 'min') {
+      var elVal = element.val();
+      // IE11 doesn't set the el val correctly if the minVal is greater than the element value
+      if (minVal > elVal) {
+        element.val(minVal);
+        elVal = minVal;
+      }
+      ctrl.$setViewValue(elVal);
+    } else {
+      // TODO(matsko): implement validateLater to reduce number of validations
+      ctrl.$validate();
+    }
+  }
+
+  var minAttrType = isDefined(attr.ngMin) ? 'ngMin' : isDefined(attr.min) ? 'min' : false;
+  if (minAttrType) {
+    ctrl.$validators.min = isDefined(attr.min) && supportsRange ?
+      function noopMinValidator(value) {
+        // Since all browsers set the input to a valid value, we don't need to check validity
+        return true;
+      } :
+      // ngMin doesn't set the min attr, so the browser doesn't adjust the input value as setting min would
+      function minValidator(modelValue, viewValue) {
+        return ctrl.$isEmpty(viewValue) || isUndefined(minVal) || viewValue >= minVal;
+      };
+
+    // Assign minVal when the directive is linked. This won't run the validators as the model isn't ready yet
+    minChange(attr.min);
+    attr.$observe('min', minChange);
+  }
+
+  function maxChange(val) {
+    if (isDefined(val) && !isNumber(val)) {
+      val = parseFloat(val);
+    }
+    maxVal = isNumber(val) && !isNaN(val) ? val : undefined;
+    // ignore changes before model is initialized
+    if (isNumber(ctrl.$modelValue) && isNaN(ctrl.$modelValue)) {
+      return;
+    }
+
+    if (supportsRange && maxAttrType === 'max') {
+      var elVal = element.val();
+      // IE11 doesn't set the el val correctly if the maxVal is less than the element value
+      if (maxVal < elVal) {
+        element.val(maxVal);
+        elVal = minVal;
+      }
+      ctrl.$setViewValue(elVal);
+    } else {
+      // TODO(matsko): implement validateLater to reduce number of validations
+      ctrl.$validate();
+    }
+  }
+  var maxAttrType = isDefined(attr.max) ? 'max' : attr.ngMax ? 'ngMax' : false;
+  if (maxAttrType) {
+    ctrl.$validators.max = isDefined(attr.max) && supportsRange ?
+      function noopMaxValidator() {
+        // Since all browsers set the input to a valid value, we don't need to check validity
+        return true;
+      } :
+      // ngMax doesn't set the max attr, so the browser doesn't adjust the input value as setting max would
+      function maxValidator(modelValue, viewValue) {
+        return ctrl.$isEmpty(viewValue) || isUndefined(maxVal) || viewValue <= maxVal;
+      };
+
+    // Assign maxVal when the directive is linked. This won't run the validators as the model isn't ready yet
+    maxChange(attr.max);
+    attr.$observe('max', maxChange);
+  }
+
 }
 
 function urlInputType(scope, element, attr, ctrl, $sniffer, $browser) {
@@ -1427,14 +1680,20 @@ function emailInputType(scope, element, attr, ctrl, $sniffer, $browser) {
 }
 
 function radioInputType(scope, element, attr, ctrl) {
+  var doTrim = !attr.ngTrim || trim(attr.ngTrim) !== 'false';
   // make the name unique, if not defined
   if (isUndefined(attr.name)) {
     element.attr('name', nextUid());
   }
 
   var listener = function(ev) {
+    var value;
     if (element[0].checked) {
-      ctrl.$setViewValue(attr.value, ev && ev.type);
+      value = attr.value;
+      if (doTrim) {
+        value = trim(value);
+      }
+      ctrl.$setViewValue(value, ev && ev.type);
     }
   };
 
@@ -1442,6 +1701,11 @@ function radioInputType(scope, element, attr, ctrl) {
 
   ctrl.$render = function() {
     var value = attr.value;
+    if (doTrim) {
+      value = trim(value);
+    }
+    // Strict comparison would cause a BC
+    /* jshint eqeqeq:false */
     element[0].checked = (value == ctrl.$viewValue);
   };
 
@@ -1513,8 +1777,8 @@ function checkboxInputType(scope, element, attr, ctrl, $sniffer, $browser, $filt
  * @param {number=} ngMaxlength Sets `maxlength` validation error key if the value is longer than
  *    maxlength. Setting the attribute to a negative or non-numeric value, allows view values of any
  *    length.
- * @param {string=} ngPattern Sets `pattern` validation error key if the ngModel value does not match
- *    a RegExp found by evaluating the Angular expression given in the attribute value.
+ * @param {string=} ngPattern Sets `pattern` validation error key if the ngModel {@link ngModel.NgModelController#$viewValue $viewValue}
+ *    does not match a RegExp found by evaluating the Angular expression given in the attribute value.
  *    If the expression evaluates to a RegExp object, then this is used directly.
  *    If the expression evaluates to a string, then it will be converted to a RegExp
  *    after wrapping it in `^` and `$` characters. For instance, `"abc"` will be converted to
@@ -1525,6 +1789,20 @@ function checkboxInputType(scope, element, attr, ctrl, $sniffer, $browser, $filt
  * @param {string=} ngChange Angular expression to be executed when input changes due to user
  *    interaction with the input element.
  * @param {boolean=} [ngTrim=true] If set to false Angular will not automatically trim the input.
+ *
+ * @knownIssue
+ *
+ * When specifying the `placeholder` attribute of `<textarea>`, Internet Explorer will temporarily
+ * insert the placeholder value as the textarea's content. If the placeholder value contains
+ * interpolation (`{{ ... }}`), an error will be logged in the console when Angular tries to update
+ * the value of the by-then-removed text node. This doesn't affect the functionality of the
+ * textarea, but can be undesirable.
+ *
+ * You can work around this Internet Explorer issue by using `ng-attr-placeholder` instead of
+ * `placeholder` on textareas, whenever you need interpolation in the placeholder value. You can
+ * find more details on `ngAttr` in the
+ * [Interpolation](guide/interpolation#-ngattr-for-binding-to-arbitrary-attributes) section of the
+ * Developer Guide.
  */
 
 
@@ -1552,8 +1830,8 @@ function checkboxInputType(scope, element, attr, ctrl, $sniffer, $browser, $filt
  * @param {number=} ngMaxlength Sets `maxlength` validation error key if the value is longer than
  *    maxlength. Setting the attribute to a negative or non-numeric value, allows view values of any
  *    length.
- * @param {string=} ngPattern Sets `pattern` validation error key if the ngModel value does not match
- *    a RegExp found by evaluating the Angular expression given in the attribute value.
+ * @param {string=} ngPattern Sets `pattern` validation error key if the ngModel {@link ngModel.NgModelController#$viewValue $viewValue}
+ *    value does not match a RegExp found by evaluating the Angular expression given in the attribute value.
  *    If the expression evaluates to a RegExp object, then this is used directly.
  *    If the expression evaluates to a string, then it will be converted to a RegExp
  *    after wrapping it in `^` and `$` characters. For instance, `"abc"` will be converted to
@@ -1696,10 +1974,8 @@ var CONSTANT_VALUE_REGEXP = /^(true|false|\d+)$/;
  * `ngValue` is useful when dynamically generating lists of radio buttons using
  * {@link ngRepeat `ngRepeat`}, as shown below.
  *
- * Likewise, `ngValue` can be used to generate `<option>` elements for
- * the {@link select `select`} element. In that case however, only strings are supported
- * for the `value `attribute, so the resulting `ngModel` will always be a string.
- * Support for `select` models with non-string values is available via `ngOptions`.
+ * Likewise, `ngValue` can be used to set the value of `<option>` elements for
+ * the {@link select `select`} element.
  *
  * @element input
  * @param {string=} ngValue angular expression, whose value will be bound to the `value` attribute

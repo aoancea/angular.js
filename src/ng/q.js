@@ -13,15 +13,15 @@
  * [Kris Kowal's Q](https://github.com/kriskowal/q).
  *
  * $q can be used in two fashions --- one which is more similar to Kris Kowal's Q or jQuery's Deferred
- * implementations, and the other which resembles ES6 promises to some degree.
+ * implementations, and the other which resembles ES6 (ES2015) promises to some degree.
  *
  * # $q constructor
  *
  * The streamlined ES6 style promise is essentially just using $q as a constructor which takes a `resolver`
- * function as the first argument. This is similar to the native Promise implementation from ES6 Harmony,
+ * function as the first argument. This is similar to the native Promise implementation from ES6,
  * see [MDN](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise).
  *
- * While the constructor-style use is supported, not all of the supporting methods from ES6 Harmony promises are
+ * While the constructor-style use is supported, not all of the supporting methods from ES6 promises are
  * available yet.
  *
  * It can be used like so:
@@ -52,6 +52,8 @@
  * ```
  *
  * Note: progress/notify callbacks are not currently supported via the ES6-style interface.
+ *
+ * Note: unlike ES6 behavior, an exception thrown in the constructor function will NOT implicitly reject the promise.
  *
  * However, the more traditional CommonJS-style usage is still available, and documented below.
  *
@@ -133,7 +135,7 @@
  *
  * **Methods**
  *
- * - `then(successCallback, errorCallback, notifyCallback)` – regardless of when the promise was or
+ * - `then(successCallback, [errorCallback], [notifyCallback])` – regardless of when the promise was or
  *   will be resolved or rejected, `then` calls one of the success or error callbacks asynchronously
  *   as soon as the result is available. The callbacks are called with a single argument: the result
  *   or rejection reason. Additionally, the notify callback may be called zero or more times to
@@ -144,7 +146,8 @@
  *   with the value which is resolved in that promise using
  *   [promise chaining](http://www.html5rocks.com/en/tutorials/es6/promises/#toc-promises-queues)).
  *   It also notifies via the return value of the `notifyCallback` method. The promise cannot be
- *   resolved or rejected from the notifyCallback method.
+ *   resolved or rejected from the notifyCallback method. The errorCallback and notifyCallback
+ *   arguments are optional.
  *
  * - `catch(errorCallback)` – shorthand for `promise.then(null, errorCallback)`
  *
@@ -184,7 +187,7 @@
  * - Q has many more features than $q, but that comes at a cost of bytes. $q is tiny, but contains
  *   all the important functionality needed for common async tasks.
  *
- *  # Testing
+ * # Testing
  *
  *  ```js
  *    it('should simulate promise', inject(function($q, $rootScope) {
@@ -214,21 +217,58 @@
  *
  * @returns {Promise} The newly created promise.
  */
+/**
+ * @ngdoc provider
+ * @name $qProvider
+ *
+ * @description
+ */
 function $QProvider() {
-
+  var errorOnUnhandledRejections = true;
   this.$get = ['$rootScope', '$exceptionHandler', function($rootScope, $exceptionHandler) {
     return qFactory(function(callback) {
       $rootScope.$evalAsync(callback);
-    }, $exceptionHandler);
+    }, $exceptionHandler, errorOnUnhandledRejections);
   }];
+
+  /**
+   * @ngdoc method
+   * @name $qProvider#errorOnUnhandledRejections
+   * @kind function
+   *
+   * @description
+   * Retrieves or overrides whether to generate an error when a rejected promise is not handled.
+   *
+   * @param {boolean=} value Whether to generate an error when a rejected promise is not handled.
+   * @returns {boolean|ng.$qProvider} Current value when called without a new value or self for
+   *    chaining otherwise.
+   */
+  this.errorOnUnhandledRejections = function(value) {
+    if (isDefined(value)) {
+      errorOnUnhandledRejections = value;
+      return this;
+    } else {
+      return errorOnUnhandledRejections;
+    }
+  };
 }
 
 function $$QProvider() {
+  var errorOnUnhandledRejections = true;
   this.$get = ['$browser', '$exceptionHandler', function($browser, $exceptionHandler) {
     return qFactory(function(callback) {
       $browser.defer(callback);
-    }, $exceptionHandler);
+    }, $exceptionHandler, errorOnUnhandledRejections);
   }];
+
+  this.errorOnUnhandledRejections = function(value) {
+    if (isDefined(value)) {
+      errorOnUnhandledRejections = value;
+      return this;
+    } else {
+      return errorOnUnhandledRejections;
+    }
+  };
 }
 
 /**
@@ -237,22 +277,14 @@ function $$QProvider() {
  * @param {function(function)} nextTick Function for executing functions in the next turn.
  * @param {function(...*)} exceptionHandler Function into which unexpected exceptions are passed for
  *     debugging purposes.
+ @ param {=boolean} errorOnUnhandledRejections Whether an error should be generated on unhandled
+ *     promises rejections.
  * @returns {object} Promise manager.
  */
-function qFactory(nextTick, exceptionHandler) {
+function qFactory(nextTick, exceptionHandler, errorOnUnhandledRejections) {
   var $qMinErr = minErr('$q', TypeError);
-  function callOnce(self, resolveFn, rejectFn) {
-    var called = false;
-    function wrap(fn) {
-      return function(value) {
-        if (called) return;
-        called = true;
-        fn.call(self, value);
-      };
-    }
-
-    return [wrap(resolveFn), wrap(rejectFn)];
-  }
+  var queueSize = 0;
+  var checkQueue = [];
 
   /**
    * @ngdoc method
@@ -265,7 +297,12 @@ function qFactory(nextTick, exceptionHandler) {
    * @returns {Deferred} Returns a new instance of deferred.
    */
   var defer = function() {
-    return new Deferred();
+    var d = new Deferred();
+    //Necessary to support unbound execution :/
+    d.resolve = simpleBind(d, d.resolve);
+    d.reject = simpleBind(d, d.reject);
+    d.notify = simpleBind(d, d.notify);
+    return d;
   };
 
   function Promise() {
@@ -312,36 +349,66 @@ function qFactory(nextTick, exceptionHandler) {
     pending = state.pending;
     state.processScheduled = false;
     state.pending = undefined;
-    for (var i = 0, ii = pending.length; i < ii; ++i) {
-      deferred = pending[i][0];
-      fn = pending[i][state.status];
-      try {
-        if (isFunction(fn)) {
-          deferred.resolve(fn(state.value));
-        } else if (state.status === 1) {
-          deferred.resolve(state.value);
-        } else {
-          deferred.reject(state.value);
+    try {
+      for (var i = 0, ii = pending.length; i < ii; ++i) {
+        state.pur = true;
+        deferred = pending[i][0];
+        fn = pending[i][state.status];
+        try {
+          if (isFunction(fn)) {
+            deferred.resolve(fn(state.value));
+          } else if (state.status === 1) {
+            deferred.resolve(state.value);
+          } else {
+            deferred.reject(state.value);
+          }
+        } catch (e) {
+          deferred.reject(e);
+          exceptionHandler(e);
         }
-      } catch (e) {
-        deferred.reject(e);
-        exceptionHandler(e);
+      }
+    } finally {
+      --queueSize;
+      if (errorOnUnhandledRejections && queueSize === 0) {
+        nextTick(processChecksFn());
       }
     }
   }
 
+  function processChecks() {
+    while (!queueSize && checkQueue.length) {
+      var toCheck = checkQueue.shift();
+      if (!toCheck.pur) {
+        toCheck.pur = true;
+        var errorMessage = 'Possibly unhandled rejection: ' + toDebugString(toCheck.value);
+        exceptionHandler(errorMessage);
+      }
+    }
+  }
+
+  function processChecksFn() {
+    return function() { processChecks(); };
+  }
+
+  function processQueueFn(state) {
+    return function() { processQueue(state); };
+  }
+
   function scheduleProcessQueue(state) {
+    if (errorOnUnhandledRejections && !state.pending && state.status === 2 && !state.pur) {
+      if (queueSize === 0 && checkQueue.length === 0) {
+        nextTick(processChecksFn());
+      }
+      checkQueue.push(state);
+    }
     if (state.processScheduled || !state.pending) return;
     state.processScheduled = true;
-    nextTick(function() { processQueue(state); });
+    ++queueSize;
+    nextTick(processQueueFn(state));
   }
 
   function Deferred() {
     this.promise = new Promise();
-    //Necessary to support unbound execution :/
-    this.resolve = simpleBind(this, this.resolve);
-    this.reject = simpleBind(this, this.reject);
-    this.notify = simpleBind(this, this.notify);
   }
 
   extend(Deferred.prototype, {
@@ -359,22 +426,33 @@ function qFactory(nextTick, exceptionHandler) {
     },
 
     $$resolve: function(val) {
-      var then, fns;
-
-      fns = callOnce(this, this.$$resolve, this.$$reject);
+      var then;
+      var that = this;
+      var done = false;
       try {
         if ((isObject(val) || isFunction(val))) then = val && val.then;
         if (isFunction(then)) {
           this.promise.$$state.status = -1;
-          then.call(val, fns[0], fns[1], this.notify);
+          then.call(val, resolvePromise, rejectPromise, simpleBind(this, this.notify));
         } else {
           this.promise.$$state.value = val;
           this.promise.$$state.status = 1;
           scheduleProcessQueue(this.promise.$$state);
         }
       } catch (e) {
-        fns[1](e);
+        rejectPromise(e);
         exceptionHandler(e);
+      }
+
+      function resolvePromise(val) {
+        if (done) return;
+        done = true;
+        that.$$resolve(val);
+      }
+      function rejectPromise(val) {
+        if (done) return;
+        done = true;
+        that.$$reject(val);
       }
     },
 
@@ -559,14 +637,33 @@ function qFactory(nextTick, exceptionHandler) {
     return deferred.promise;
   }
 
+  /**
+   * @ngdoc method
+   * @name $q#race
+   * @kind function
+   *
+   * @description
+   * Returns a promise that resolves or rejects as soon as one of those promises
+   * resolves or rejects, with the value or reason from that promise.
+   *
+   * @param {Array.<Promise>|Object.<Promise>} promises An array or hash of promises.
+   * @returns {Promise} a promise that resolves or rejects as soon as one of the `promises`
+   * resolves or rejects, with the value or reason from that promise.
+   */
+
+  function race(promises) {
+    var deferred = defer();
+
+    forEach(promises, function(promise) {
+      when(promise).then(deferred.resolve, deferred.reject);
+    });
+
+    return deferred.promise;
+  }
+
   var $Q = function Q(resolver) {
     if (!isFunction(resolver)) {
       throw $qMinErr('norslvr', "Expected resolverFn, got '{0}'", resolver);
-    }
-
-    if (!(this instanceof Q)) {
-      // More useful when $Q is the Promise itself.
-      return new Q(resolver);
     }
 
     var deferred = new Deferred();
@@ -584,11 +681,16 @@ function qFactory(nextTick, exceptionHandler) {
     return deferred.promise;
   };
 
+  // Let's make the instanceof operator work for promises, so that
+  // `new $q(fn) instanceof $q` would evaluate to true.
+  $Q.prototype = Promise.prototype;
+
   $Q.defer = defer;
   $Q.reject = reject;
   $Q.when = when;
   $Q.resolve = resolve;
   $Q.all = all;
+  $Q.race = race;
 
   return $Q;
 }

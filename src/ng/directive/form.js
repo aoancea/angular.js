@@ -127,7 +127,7 @@ function FormController(element, attrs, $scope, $animate, $interpolate) {
    *
    * However, if the method is used programmatically, for example by adding dynamically created controls,
    * or controls that have been previously removed without destroying their corresponding DOM element,
-   * it's the developers responsiblity to make sure the current state propagates to the parent form.
+   * it's the developers responsibility to make sure the current state propagates to the parent form.
    *
    * For example, if an input control is added that is already `$dirty` and has `$error` properties,
    * calling `$setDirty()` and `$validate()` afterwards will propagate the state to the parent form.
@@ -252,9 +252,11 @@ function FormController(element, attrs, $scope, $animate, $interpolate) {
    * @description
    * Sets the form to its pristine state.
    *
-   * This method can be called to remove the 'ng-dirty' class and set the form to its pristine
-   * state (ng-pristine class). This method will also propagate to all the controls contained
-   * in this form.
+   * This method sets the form's `$pristine` state to true, the `$dirty` state to false, removes
+   * the `ng-dirty` class and adds the `ng-pristine` class. Additionally, it sets the `$submitted`
+   * state to false.
+   *
+   * This method will also propagate to all the controls contained in this form.
    *
    * Setting a form back to a pristine state is often useful when we want to 'reuse' a form after
    * saving or resetting it.
@@ -337,13 +339,9 @@ function FormController(element, attrs, $scope, $animate, $interpolate) {
  *
  * In Angular, forms can be nested. This means that the outer form is valid when all of the child
  * forms are valid as well. However, browsers do not allow nesting of `<form>` elements, so
- * Angular provides the {@link ng.directive:ngForm `ngForm`} directive which behaves identically to
- * `<form>` but can be nested.  This allows you to have nested forms, which is very useful when
- * using Angular validation directives in forms that are dynamically generated using the
- * {@link ng.directive:ngRepeat `ngRepeat`} directive. Since you cannot dynamically generate the `name`
- * attribute of input elements using interpolation, you have to wrap each set of repeated inputs in an
- * `ngForm` directive and nest these in an outer `form` element.
- *
+ * Angular provides the {@link ng.directive:ngForm `ngForm`} directive, which behaves identically to
+ * `form` but can be nested. Nested forms can be useful, for example, if the validity of a sub-group
+ * of controls needs to be determined.
  *
  * # CSS classes
  *  - `ng-valid` is set if the form is valid.
@@ -414,7 +412,7 @@ function FormController(element, attrs, $scope, $animate, $interpolate) {
  * </pre>
  *
  * @example
-    <example deps="angular-animate.js" animations="true" fixBase="true" module="formExample">
+    <example name="ng-form" deps="angular-animate.js" animations="true" fixBase="true" module="formExample">
       <file name="index.html">
        <script>
          angular.module('formExample', [])
@@ -501,13 +499,13 @@ var formDirectiveFactory = function(isNgForm) {
                 event.preventDefault();
               };
 
-              addEventListenerFn(formElement[0], 'submit', handleFormSubmission);
+              formElement[0].addEventListener('submit', handleFormSubmission);
 
               // unregister the preventDefault listener so that we don't not leak memory but in a
               // way that will achieve the prevention of the default action.
               formElement.on('$destroy', function() {
                 $timeout(function() {
-                  removeEventListenerFn(formElement[0], 'submit', handleFormSubmission);
+                  formElement[0].removeEventListener('submit', handleFormSubmission);
                 }, 0, false);
               });
             }

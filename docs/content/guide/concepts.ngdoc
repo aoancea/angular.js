@@ -76,7 +76,7 @@ stores/updates the value of the input field into/from a variable.
 The second kind of new markup are the double curly braces `{{ expression | filter }}`:
 When the compiler encounters this markup, it will replace it with the evaluated value of the markup.
 An <a name="expression">{@link expression expression}</a> in a template is a JavaScript-like code snippet that allows
-to read and write variables. Note that those variables are not global variables.
+Angular to read and write variables. Note that those variables are not global variables.
 Just like variables in a JavaScript function live in a scope,
 Angular provides a <a name="scope">{@link scope scope}</a> for the variables accessible to expressions.
 The values that are stored in variables on the scope are referred to as the <a name="model"></a>*model*
@@ -277,8 +277,8 @@ Now that Angular knows of all the parts of the application, it needs to create t
 In the previous section we saw that controllers are created using a factory function.
 For services there are multiple ways to define their factory
 (see the {@link services service guide}).
-In the example above, we are using a function that returns the `currencyConverter` function as the factory
-for the service.
+In the example above, we are using an anonymous function as the factory function for `currencyConverter` service. 
+This function should return the `currencyConverter` service instance.
 
 Back to the initial question: How does the `InvoiceController` get a reference to the `currencyConverter` function?
 In Angular, this is done by simply defining arguments on the constructor function. With this, the injector
@@ -334,9 +334,9 @@ The following example shows how this is done with Angular:
         var refresh = function() {
           var url = YAHOO_FINANCE_URL_PATTERN.
                      replace('PAIRS', 'USD' + currencies.join('","USD'));
-          return $http.jsonp(url).success(function(data) {
+          return $http.jsonp(url).then(function(response) {
             var newUsdToForeignRates = {};
-            angular.forEach(data.query.results.rate, function(rate) {
+            angular.forEach(response.data.query.results.rate, function(rate) {
               var currency = rate.id.substring(3,6);
               newUsdToForeignRates[currency] = window.parseFloat(rate.Rate);
             });
@@ -348,8 +348,7 @@ The following example shows how this is done with Angular:
 
         return {
           currencies: currencies,
-          convert: convert,
-          refresh: refresh
+          convert: convert
         };
       }]);
   </file>
